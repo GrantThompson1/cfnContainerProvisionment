@@ -68,7 +68,6 @@ Resources:
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodeBuildServiceRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -114,7 +113,6 @@ Resources:
   EventBridgeRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: EventBridgeRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -144,7 +142,6 @@ Resources:
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: LambdaExecutionRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -168,5 +165,3 @@ Outputs:
       - Var: !GetAtt ECRRepo.RepositoryUri
     Export:
       Name: ecrURI
-
-
