@@ -41,10 +41,10 @@ Resources:
             build:
               commands:
                 - aws ecr get-login-password --region $region | docker login --username AWS --password-stdin $accountId.dkr.ecr.$region.amazonaws.com
-                - echo "FROM public.ecr.aws/docker/library/python:3.7-alpine3.16" > Dockerfile
-                - echo "RUN mkdir /var/task" >> Dockerfile
+                - echo "FROM public.ecr.aws/lambda/python:3.8" > Dockerfile
                 - echo "RUN echo 'def handler(event, context):' > /var/task/app.py" >> Dockerfile
                 - echo "RUN echo \"    return 'Hello, world!'\" >> /var/task/app.py" >> Dockerfile
+                - echo "RUN cat /var/task/app.py" >> Dockerfile
                 - echo "CMD [\"app.handler\"]" >> Dockerfile
                 - cat Dockerfile
                 - docker build -t $repoName:latest .
