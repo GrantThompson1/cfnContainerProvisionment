@@ -103,7 +103,6 @@ Resources:
           status-details:
             status:
               - CREATE_IN_PROGRESS
-              - UPDATE_IN_PROGRESS
       State: ENABLED
       Targets:
         - Arn: !GetAtt CodeBuildProject.Arn
@@ -133,6 +132,8 @@ Resources:
                 Resource: "*"
   LambdaFunction:
     Type: AWS::Lambda::Function
+    DependsOn: 
+      - WaitCondition
     Properties:
       Role: !GetAtt LambdaExecutionRole.Arn
       PackageType: Image
