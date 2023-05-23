@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole: !Ref CodeBuildServiceRole
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:4.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: repoName
+            Value: !Ref ECRRepo
+            Type: PLAINTEXT
+          - Name: repoURI
+            Value: !GetAtt ECRRepo.RepositoryUri
+            Type: PLAINTEXT
+          - Name: region
+            Value: !Ref "AWS::Region"
+            Type: PLAINTEXT
+          - Name: accountId
+            Value: !Ref "AWS::AccountId"
+            Type: PLAINTEXT
+          - Name: callbackWaitHandle
+            Value: { "Ref" : "WaitHandle" }
+            Type: PLAINTEXT     
+      TimeoutInMinutes: 10
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - aws ecr get-login-password --region $region | docker login --username AWS --password-stdin $accountId.dkr.ecr.$region.amazonaws.com
+                - echo "FROM public.ecr.aws/docker/library/python:3.7-alpine3.16" > Dockerfile
+                - echo "RUN mkdir /var/task" >> Dockerfile
+                - echo "RUN echo 'def handler(event, context):' > /var/task/app.py" >> Dockerfile
+                - echo "RUN echo \"    return 'Hello, world!'\" >> /var/task/app.py" >> Dockerfile
+                - echo "CMD [\"app.handler\"]" >> Dockerfile
+                - cat Dockerfile
+                - docker build -t $repoName:latest .
+                - docker tag $repoName:latest $repoURI:latest
+                - docker push $repoURI:latest
+                - echo '{"Status":"SUCCESS","Reason":"Configuration Complete","UniqueId":"ID1234","Data":"Application has completed configuration."}' > result.json
+                - curl -T result.json $callbackWaitHandle
+
+  WaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  WaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: 
+      - CodeBuildProject
+      - MyEventBridgeRule
+    Properties:
+      Handle: !Ref 'WaitHandle'
+      Timeout: '600'
+      Count: 1
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeBuildServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+  CodeBuildPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: root
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: '*'
+            Resource: '*'
+      Roles:
+        - !Ref CodeBuildServiceRole
+
+  MyEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.cloudformation
+        detail-type:
+          - CloudFormation Resource Status Change
+        detail:
+          stack-id: [{ "Ref" : "AWS::StackId" }]
+          logical-resource-id: ["WaitCondition"]
+          status-details:
+            status:
+              - CREATE_IN_PROGRESS
+              - UPDATE_IN_PROGRESS
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CodeBuildProject.Arn
+          Id: 'CrossRegionDestinationBus'
+          RoleArn: !GetAtt 
+            - EventBridgeRole
+            - Arn
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EventBridgeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EventBridgePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: "*"
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaExecutionRole.Arn
+      PackageType: Image
+      Code:
+        ImageUri: !Sub
+          - ${Var}:latest
+          - Var: !GetAtt ECRRepo.RepositoryUri
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "*"
+                Resource: "*"
+Outputs:
+  ecrURI:
+    Description: Information about the value
+    Value: !Sub
+      - ${Var}:latest
+      - Var: !GetAtt ECRRepo.RepositoryUri
+    Export:
+      Name: ecrURI
+
+

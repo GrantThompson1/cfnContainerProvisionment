@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+  MyEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.cloudformation
+        detail-type:
+          - CloudFormation Resource Status Change
+        detail:
+          stack-id: ["arn:aws:cloudformation:us-east-1:997477333591:stack/provision27912/f09bb650-f906-11ed-bd3f-0a9b4dbf4621"]
+          logical-resource-id: ["WaitHandle"]
+          status-details:
+            status:
+              - UPDATE_COMPLETE
+              - CREATE_COMPLETE
+      State: ENABLED
+      Targets:
+        - Arn: >-
+            arn:aws:codebuild:us-east-1:997477333591:project/CodeBuildProject-MW0LRDUocAFP
+          Id: 'CrossRegionDestinationBus'
+          RoleArn: !GetAtt 
+            - EventBridgeRole
+            - Arn
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EventBridgeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EventBridgePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: "*"
+
